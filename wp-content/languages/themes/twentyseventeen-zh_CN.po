@@ -276,7 +276,7 @@ msgstr "社交网络链接菜单"
 
 #: template-parts/footer/site-info.php:13
 msgid "Proudly powered by %s"
-msgstr "自豪地采用%s"
+msgstr "蜀ICP备18035236号"
 
 #. #-#-#-#-#  twentyseventeen.pot (Twenty Seventeen 1.4)  #-#-#-#-#
 #. Author URI of the plugin/theme

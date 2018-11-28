@@ -69,7 +69,7 @@ msgstr "https://cn.wordpress.org/"
 
 #: footer.php:51
 msgid "Proudly powered by %s"
-msgstr "自豪地采用%s"
+msgstr "蜀ICP备18035236号"
 
 #: functions.php:77 header.php:49
 msgid "Primary Menu"

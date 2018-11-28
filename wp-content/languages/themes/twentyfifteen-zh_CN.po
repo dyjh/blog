@@ -224,7 +224,7 @@ msgstr "主菜单"
 
 #: footer.php:25
 msgid "Proudly powered by %s"
-msgstr "自豪地采用%s"
+msgstr "蜀ICP备18035236号"
 
 #. #-#-#-#-#  twentyfifteen.pot (Twenty Fifteen 1.9)  #-#-#-#-#
 #. Author URI of the plugin/theme
