@@ -34,6 +34,7 @@ Header set Expires "Mon, 29 Oct 1923 20:30:00 GMT"
 </ifModule>
 </FilesMatch>
 # END WpFastestCache
+
 # BEGIN LBCWpFastestCache
 <FilesMatch "\.(webm|ogg|mp4|ico|pdf|flv|jpg|jpeg|png|gif|webp|js|css|swf|x-html|css|xml|js|woff|woff2|ttf|svg|eot)(\.gz)?$">
 <IfModule mod_expires.c>
