@@ -87,8 +87,9 @@ if ( !defined('ABSPATH') )
 
 /** Sets up WordPress vars and included files. */
 require_once(ABSPATH . 'wp-settings.php');
-define('FTP_BASE', 'www/blog/');
-define('FTP_CONTENT_DIR', 'www/blog/wp-content');
-define('FTP_PLUGIN_DIR', 'www/blog/wp-content/plugins/');
-define('FTP_THEMES_DIR', 'www/blog/wp-content/themes/');
+define('FTP_BASE', 'wwwroot/blog/');
+define('FTP_CONTENT_DIR', 'wwwroot/blog/wp-content');
+define('FTP_PLUGIN_DIR', 'wwwroot/blog/wp-content/plugins/');
+define('FTP_THEMES_DIR', 'wwwroot/blog/wp-content/themes/');
 define('FS_METHOD', 'direct');
+define('ALLOW_UNFILTERED_UPLOADS', true);

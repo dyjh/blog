@@ -2,4 +2,6 @@
 .DS_Store
 data/**/*
 attachment/**/*
+wp-content/uploads/*
+wp-content/cache/*
 !
