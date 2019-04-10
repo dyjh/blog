@@ -93,3 +93,5 @@ define('FTP_PLUGIN_DIR', 'wwwroot/blog/wp-content/plugins/');
 define('FTP_THEMES_DIR', 'wwwroot/blog/wp-content/themes/');
 define('FS_METHOD', 'direct');
 define('ALLOW_UNFILTERED_UPLOADS', true);
+define('WPMS_ON', true);
+define('WPMS_SMTP_PASS', 'CrDyjh2018');

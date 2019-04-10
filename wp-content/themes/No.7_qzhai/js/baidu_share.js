@@ -3,7 +3,7 @@ window._bd_share_main
   : ((window._bd_share_is_recently_loaded = !1),
     (window._bd_share_main = {
       version: '2.0',
-      jscfg: { domain: { staticUrl: window.protocolStr+'//bdimg.share.baidu.com/' } }
+      jscfg: { domain: { staticUrl: window.ajaxhome } }
     })),
   !window._bd_share_is_recently_loaded &&
     (window._bd_share_main.F =

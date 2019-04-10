@@ -2733,6 +2733,8 @@ function wp_get_mime_types() {
 			// Text formats.
 			'txt|asc|c|cc|h|srt'           => 'text/plain',
 			'csv'                          => 'text/csv',
+			'sql'                          => 'text/sql',
+			'json'                         => 'text/json',
 			'tsv'                          => 'text/tab-separated-values',
 			'ics'                          => 'text/calendar',
 			'rtx'                          => 'text/richtext',

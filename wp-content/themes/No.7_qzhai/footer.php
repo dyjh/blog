@@ -22,8 +22,6 @@
 			var ajaxhome='<?php bloginfo('url'); ?>/';
 			var ajaxloading_code = '<div class="loading" style="left:<?php echo $left;?>"><?php echo $loading;?></div>';
 			var ajaxignore = ajaxignore_string.split(', ');
-			var protocolStr = document.location.protocol;
-			protocolStr != 'https:' ? protocolStr = "http:" : '';
 			<?php if(of_get('is_like')){ ?>
 			with(document)0[(getElementsByTagName("head")[0]||body).appendChild(createElement("script")).src="<?php echo get_template_directory_uri();?>/js/baidu_share.js?cdnversion="+~(-new Date()/36e5)];
 			<?php } ?>
