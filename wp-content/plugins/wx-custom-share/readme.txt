@@ -4,8 +4,8 @@ Contributors: ooqwqoo
 Tags: 微信, 微信分享, 微信分享小图标, wechat, wechat share, wechat share info, customize share link info
 Donate link: http://www.qwqoffice.com/article-20.html
 Requires at least: 3.6
-Tested up to: 4.9
-Stable tag: 1.5.9
+Tested up to: 5.2.2
+Stable tag: 1.6
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -66,6 +66,15 @@ function change_first_paragraph_min_length(){
 }
 ```
 
+= How to modify the default share title format? =
+Use the filter `wxcs_share_title_format`, example:
+```
+add_filter( 'wxcs_share_title_format', 'change_wxcs_share_title_format' );
+function change_wxcs_share_title_format(){
+  return '{{title}} | {{blogname}}';
+}
+```
+
 == Screenshots ==
 1. WX Custom Share customize information in post edit page.
 2. WX Custom Share setting page.
@@ -75,6 +84,17 @@ function change_first_paragraph_min_length(){
 6. Performance in QZone.
 
 == Changelog ==
+= 1.6 =
+* Add: Purge the AccessToken and JS Ticket when change the AppID or AppSecret.
+* Add: filter `wxcs_share_info` for other plugin modify share info.
+* Add: filter `wxcs_share_title_format` for other plugin modify default share title.
+* Add: default title and default description setting.
+* Updated: use default share setting in the other page.
+* Updated: remove enabled post types setting.
+* Updated: hide home page share setting when use a page as front page.
+* Updated: add WooCommerce MiniProgram banner.
+* Fixed: share info not working in some themes.
+
 = 1.5.9 =
 * Updated: Replace IP API by `http://ip.taobao.com/service/getIpInfo.php?ip=myip`.
 
@@ -159,6 +179,17 @@ function change_first_paragraph_min_length(){
 * The first version.
 
 == Upgrade notice ==
+= 1.6 - Released: Jun 19, 2019 =
+* Add: Purge the AccessToken and JS Ticket when change the AppID or AppSecret.
+* Add: filter `wxcs_share_info` for other plugin modify share info.
+* Add: filter `wxcs_share_title_format` for other plugin modify default share title.
+* Add: default title and default description setting.
+* Updated: use default share setting in the other page.
+* Updated: remove enabled post types setting.
+* Updated: hide home page share setting when use a page as front page.
+* Updated: add WooCommerce MiniProgram banner.
+* Fixed: share info not working in some themes.
+
 = 1.5.9 - Released: Oct 10, 2018 =
 * Updated: Replace IP API by `http://ip.taobao.com/service/getIpInfo.php?ip=myip`.
 

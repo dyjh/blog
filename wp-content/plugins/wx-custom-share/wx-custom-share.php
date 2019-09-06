@@ -3,7 +3,7 @@
 Plugin Name: 自定义微信分享
 Plugin URI: https://www.qwqoffice.com/article-20.html
 Description: 自定义微信分享和QQ分享链接中的信息，包括标题、描述、小图标和分享链接
-Version: 1.5.9
+Version: 1.6
 Author: QwqOffice
 Author URI: https://www.qwqoffice.com
 License: GPL2
@@ -11,46 +11,32 @@ License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Text Domain: wx-custom-share
 Domain Path: /languages
 */
+defined( 'ABSPATH' ) || exit;
 
-//禁止直接访问
-if ( ! defined( 'ABSPATH' ) ) exit;
+define( 'WXCS_PATH', plugin_dir_path( __FILE__ ) );
+define( 'WXCS_URL', plugin_dir_url( __FILE__ ) );
 
 class WX_Custom_Share{
 	
 	function __construct(){
 		
-		$settings = get_option('ws_settings');
-		
 		add_action( 'admin_notices',									array( $this, 'api_config_notice' ) );
 		add_filter( 'plugin_action_links_' . plugin_basename(__FILE__),	array( $this, 'add_action_links' ) );
 		add_filter( 'plugin_row_meta',									array( $this, 'add_plugin_row_meta' ), 10, 2 );
-		if( is_admin() ) add_action( 'admin_menu',						array( $this, 'setting_menu' ) );
-		add_action( 'admin_init',										array( $this, 'settings_init' ) );
-		if( is_admin() ) add_action( 'add_meta_boxes',					array( $this, 'add_post_metabox' ) );
+		if( is_admin() ) {
+			add_action( 'admin_menu',						array( $this, 'setting_menu' ) );
+			add_action( 'admin_init',						array( $this, 'settings_init' ) );
+			add_action( 'add_meta_boxes',					array( $this, 'add_post_metabox' ) );
+			add_filter( 'pre_update_option_ws_settings',	array( $this, 'delete_access_token' ), 10, 3 );
+		}
 		add_action( 'save_post',										array( $this, 'save_post_data' ) );
 		add_action( 'wp_footer',										array( $this, 'add_share_js' ), 19 );
 		add_action( 'wp_footer',										array( $this, 'add_share_info' ), 21 );
 		add_action( 'wp_ajax_wxcs_get_share_info',						array( $this, 'ajax_get_share_info' ) );
 		add_action( 'wp_ajax_nopriv_wxcs_get_share_info',				array( $this, 'ajax_get_share_info' ) );
+		add_action( 'wp_ajax_wxcs_close_notice',						array( $this, 'ajax_close_notice' ) );
 		add_action( 'init',												array( $this, 'load_textdomain' ) );
-		add_action( 'wpmu_new_blog',									array( $this, 'new_blog' ), 10, 6 );
 	}
-	
-	/*//获取客户端IP
-	add_action( 'wp_ajax_nopriv_wxcs_get_ip', 'wxcs_get_client_ip' );
-	function wxcs_get_client_ip() {
-		if( ! empty( $_SERVER['HTTP_CLIENT_IP'] ) ){
-			$ip = $_SERVER['HTTP_CLIENT_IP'];
-		}
-		elseif( ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ){
-			$ip = $_SERVER['HTTP_X_FORWARDED_FOR'];
-		}
-		else{
-			$ip = $_SERVER['REMOTE_ADDR'];
-		}
-		echo $ip;
-		wp_die();
-	}*/
 
 	//获取服务器公网IP
 	function get_public_ip(){
@@ -69,53 +55,68 @@ class WX_Custom_Share{
 
 	//获取标题
 	function get_title( $type, $object_id = null ){
-		
+		$info = array();
 		$settings = get_option('ws_settings');
-		
 		$blog_name = get_bloginfo('name');
+		$default_title = ! empty( $settings['ws_default_title'] ) ? $settings['ws_default_title'] : '';
 		
-		//首页
+		$title_format = apply_filters( 'wxcs_share_title_format', '{{title}} - {{blogname}}' );
+		
 		if( $type == 'home' ){
-			$home_title = isset( $settings['ws_home_title'] ) && ! empty( $settings['ws_home_title'] ) ? $settings['ws_home_title'] : false;
-			$home_title = $home_title ? $home_title : get_option('blogname');
-			return array( 'display' => $home_title );
+			$home_title = ! empty( $settings['ws_home_title'] ) ? $settings['ws_home_title'] : '';
+			
+			$default = $default_title ? $default_title : get_option('blogname');
+			
+			$info['display'] = $home_title ? $home_title : $default;
+			$info['meta'] = $home_title;
+			$info['default'] = $default;
+			return $info;
 		}
-		else if( $type == 'post' ){
+		elseif( $type == 'post' ){
 			$post = get_post( $object_id );
 			$meta_info = get_post_meta( $object_id, 'ws_info', true );
 			
 			$meta_title = isset( $meta_info['ws_title'] ) ? $meta_info['ws_title'] : '';
-			$post_default_title = $post->post_title .' - '. $blog_name;
 			
-			$info['display'] = $meta_title != '' ? $meta_title : $post_default_title;
+			$vars = array(
+				'{{title}}' => $post->post_title,
+				'{{blogname}}' => $blog_name,
+			);
+			$post_title = str_replace( array_keys($vars), $vars, $title_format );
+			
+			$info['display'] = $meta_title ? $meta_title : $post_title;
 			$info['meta'] = $meta_title;
-			$info['default'] = $post_default_title;
+			$info['default'] = $post_title;
 			return $info;
 		}
-		else if( $type == 'other' ){
-			
-			$info['display'] = '';
+		elseif( $type == 'other' ){
+			$info['display'] = $default_title ? $default_title : get_option('blogname');
 			return $info;
 		}
 	}
 
 	//获取描述
 	function get_desc( $type, $object_id = null ){
-		
+		$info = array();
 		$settings = get_option('ws_settings');
+		$default_desc = ! empty( $settings['ws_default_desc'] ) ? $settings['ws_default_desc'] : '';
 		
-		//首页
 		if( $type == 'home' ){
-			$home_desc = isset( $settings['ws_home_desc'] ) && ! empty( $settings['ws_home_desc'] ) ? $settings['ws_home_desc'] : false;
-			$home_desc = $home_desc ? $home_desc : get_option('blogdescription');
-			return array( 'display' => $home_desc );
+			$home_desc = ! empty( $settings['ws_home_desc'] ) ? $settings['ws_home_desc'] : '';
+			
+			$default = $default_desc ? $default_desc : get_option('blogdescription');
+			
+			$info['display'] = $home_desc ? $home_desc : $default;
+			$info['meta'] = $home_desc;
+			$info['default'] = $default;
+			return $info;
 		}
-		else if( $type == 'post' ){
+		elseif( $type == 'post' ){
 			$post = get_post( $object_id );
 			$meta_info = get_post_meta( $object_id, 'ws_info', true );
 			
 			$meta_desc = isset( $meta_info['ws_desc'] ) ? $meta_info['ws_desc'] : '';
-			$post_default_desc = get_permalink($post);
+			$post_desc = get_permalink($post);
 			
 			$first_p = false;
 			preg_match_all( '#<p>(.+?)</p>#i', apply_filters( 'the_content', $post->post_content ), $matched );
@@ -128,43 +129,47 @@ class WX_Custom_Share{
 				}
 			}
 			
-			$info['display'] = $meta_desc != '' ? $meta_desc : ( $first_p ? $first_p : $post_default_desc );
+			$default = $first_p ? $first_p : ( $default_desc ? $default_desc : $post_desc );
+			
+			$info['display'] = $meta_desc ? $meta_desc : $default;
 			$info['meta'] = $meta_desc;
-			$info['default'] = $first_p ? $first_p : $post_default_desc;
+			$info['default'] = $default;
 			return $info;
 		}
-		else if( $type == 'other' ){
-			
-			$info['display'] = '';
+		elseif( $type == 'other' ){
+			$info['display'] = $default_desc ? $default_desc : get_option('blogdescription');
 			return $info;
 		}
 	}
 
 	//获取URL
 	function get_url( $type, $object_id = null ){
-		
+		$info = array();
 		$settings = get_option('ws_settings');
 		
-		//首页
 		if( $type == 'home' ){
-			$home_url = isset( $settings['ws_home_url'] ) && ! empty( $settings['ws_home_url'] ) ? $settings['ws_home_url'] : false;
-			$home_url = $home_url ? $home_url : get_option('siteurl');
-			return array( 'display' => $home_url );
+			$home_url = ! empty( $settings['ws_home_url'] ) ? $settings['ws_home_url'] : '';
+			
+			$default = get_option('siteurl');
+			
+			$info['display'] = $home_url ? $home_url : $default;
+			$info['meta'] = $home_url;
+			$info['default'] = $default;
+			return $info;
 		}
-		else if( $type == 'post' ){
+		elseif( $type == 'post' ){
 			$post = get_post( $object_id );
 			$meta_info = get_post_meta( $object_id, 'ws_info', true );
 			
 			$meta_url = isset( $meta_info['ws_url'] ) ? $meta_info['ws_url'] : '';
-			$post_default_url = get_permalink( $post );
+			$post_url = get_permalink( $post );
 			
-			$info['display'] = $meta_url != '' ? $meta_url : $post_default_url;
+			$info['display'] = $meta_url ? $meta_url : $post_url;
 			$info['meta'] = $meta_url;
-			$info['default'] = $post_default_url;
+			$info['default'] = $post_url;
 			return $info;
 		}
-		else if( $type == 'other' ){
-			
+		elseif( $type == 'other' ){
 			$info['display'] = '';
 			return $info;
 		}
@@ -172,35 +177,39 @@ class WX_Custom_Share{
 
 	//获取小图标
 	function get_img( $type, $object_id = null ){
-		
+		$info = array();
 		$settings = get_option('ws_settings');
-		
-		$default_img = isset( $settings['ws_default_img'] ) && ! empty( $settings['ws_default_img'] ) ? $settings['ws_default_img'] : false;
-		
-		//首页
+		$default_img = ! empty( $settings['ws_default_img'] ) ? $settings['ws_default_img'] : '';
+
 		if( $type == 'home' ){
-			$home_img = isset( $settings['ws_home_img'] ) && ! empty( $settings['ws_home_img'] ) ? $settings['ws_home_img'] : false;
-			$home_img = $home_img ? $home_img : ( $default_img ? $default_img : '' );
-			return array( 'display' => $home_img );
+			$home_img = ! empty( $settings['ws_home_img'] ) ? $settings['ws_home_img'] : '';
+			
+			$default = $default_img ? $default_img : '';
+			
+			$info['display'] = $home_img ? $home_img : $default;
+			$info['meta'] = $home_img;
+			$info['default'] = $default;
+			return $info;
 		}
-		else if( $type == 'post' ){
+		elseif( $type == 'post' ){
 			$post = get_post( $object_id );
 			$meta_info = get_post_meta( $object_id, 'ws_info', true );
 			
 			$meta_img = isset( $meta_info['ws_img'] ) ? $meta_info['ws_img'] : '';
-			$post_default_img = get_the_post_thumbnail_url($post);
+			$post_img = get_the_post_thumbnail_url($post);
 			
 			$first_img = false;
 			$count = preg_match_all( '#<img.+src=[\'"]([^\'"]+)[\'"].*>#i', apply_filters( 'the_content', $post->post_content ), $matched );
 			if( $count > 0 ) $first_img = $matched[1][0];
 			
-			$info['display'] = $meta_img != '' ? $meta_img : ( $post_default_img ? $post_default_img : ( $first_img ? $first_img : ( $default_img ? $default_img : '' ) ) );
+			$default = $post_img ? $post_img : ( $first_img ? $first_img : ( $default_img ? $default_img : '' ) );
+			
+			$info['display'] = $meta_img ? $meta_img : $default;
 			$info['meta'] = $meta_img;
-			$info['default'] = $post_default_img ? $post_default_img : ( $first_img ? $first_img : ( $default_img ? $default_img : '' ) );
+			$info['default'] = $default;
 			return $info;
 		}
-		else if( $type == 'other' ){
-			
+		elseif( $type == 'other' ){
 			$info['display'] = $default_img;
 			return $info;
 		}
@@ -208,66 +217,41 @@ class WX_Custom_Share{
 	
 	//获取是否使用当前URL
 	function is_use_actual_url( $type, $object_id = null ){
-		
-		//首页
 		if( $type == 'home' ){
-			
 			$settings = get_option('ws_settings');
 			return isset( $settings['ws_home_use_actual_url'] );
 		}
-		else if( $type == 'post' ){
-			
+		elseif( $type == 'post' ){
 			$meta_info = get_post_meta( $object_id, 'ws_info', true );
 			return isset( $meta_info['ws_use_actual_url'] );
 		}
-		else if( $type == 'category' ){
-			
-			$meta_info = get_term_meta( $object_id, 'ws_info', true );
-			return isset( $meta_info['ws_use_actual_url'] );
-		}
-		else if( $type == 'other' ){
-			
+		elseif( $type == 'other' ){
 			return true;
 		}
 	}
 
 	//是否错误
 	function is_api_error( $response ){
-		
-		if( ! is_wp_error( $response ) ){
-			
-			if( is_array( $response ) && isset( $response['body'] ) ){
-				
-				$result = json_decode( $response['body'] );
-				return isset( $result->errcode ) && $result->errcode != 0;
-			}
-			else{
-				return false;
-			}
+		if( is_wp_error( $response ) ){
+			return true;
+		}
+		if( is_array( $response ) && isset( $response['body'] ) ){
+			$result = json_decode( $response['body'] );
+			return isset( $result->errcode ) && $result->errcode != 0;
 		}
 		else{
-			return true;
+			return false;
 		}
 	}
 	
 	//获取错误详情
 	function get_api_error( $response ){
-		
 		return is_wp_error( $response ) ? $response->get_error_message() : json_decode( $response['body'] );
 	}
 
-	/*//输出错误
-	function wxcs_print_error( $result ){
-		$settings = get_option('ws_settings');
-		if( isset($settings['ws_debug']) ){
-			echo "<script>console.error(eval('(' + '". json_encode($result) ."' + ')'))</script>";
-		}
-	}*/
-
 	//获取Access Token
 	function get_access_token(){
-		
-		if( ($access_token = get_option('ws_access_token')) !== false && $access_token != '' && time() < $access_token['expire_time']){
+		if( ($access_token = get_option('ws_access_token')) && time() < $access_token['expire_time']){
 			return $access_token['access_token'];
 		}
 		
@@ -288,8 +272,7 @@ class WX_Custom_Share{
 
 	//获取JSAPI TICKET
 	function get_jsapi_ticket(){
-		
-		if( ($jsapi_ticket = get_option('ws_jsapi_ticket')) !== false && $jsapi_ticket != '' && time() < $jsapi_ticket['expire_time']){
+		if( ($jsapi_ticket = get_option('ws_jsapi_ticket')) && time() < $jsapi_ticket['expire_time']){
 			return $jsapi_ticket['jsapi_ticket'];
 		}
 		
@@ -297,7 +280,7 @@ class WX_Custom_Share{
 		if( $this->is_api_error( $access_token = $this->get_access_token() ) ){
 			return $access_token;
 		}
-		$api_url = 'https://api.weixin.qq.com/cgi-bin/ticket/getticket?access_token='. $access_token .'&type=jsapi';
+		$api_url = 'https://api.weixin.qq.com/cgi-bin/ticket/getticket?access_token='. $access_token . '&type=jsapi';
 		$response = wp_remote_get( $api_url );
 		if ( $this->is_api_error( $response ) ){
 			return $response;
@@ -313,7 +296,6 @@ class WX_Custom_Share{
 
 	//生成随机字符串
 	function generate_noncestr( $length = 16 ){
-		
 		$noncestr = '';
 		$chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 		for( $i = 0; $i < $length; $i++ ){
@@ -322,26 +304,14 @@ class WX_Custom_Share{
 		return $noncestr;
 	}
 
-	/*//获取#前面的完整URL
-	function get_signature_url(){
-		$protocol = is_ssl() ? 'https://' : 'http://';
-		$url = $protocol . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
-		$url = explode('#', $url);
-		$url = $url[0];
-		
-		return $url;
-	}*/
-
 	//生成签名
 	function generate_signature( $jsapi_ticket, $noncestr, $timestamp, $url ){
-		
 		$str = 'jsapi_ticket='. $jsapi_ticket .'&noncestr='. $noncestr .'&timestamp='. $timestamp .'&url='. $url;
 		return sha1($str);
 	}
 
 	//获取所有自定义类型
 	function get_all_post_types(){
-		
 		$args = array( 'public' => true, '_builtin' => false );
 		$builtInArgs = array( 'public' => true, '_builtin' => true );
 		$output = 'objects';
@@ -359,117 +329,122 @@ class WX_Custom_Share{
 
 	//API配置通知
 	function api_config_notice(){
+		$last_close = get_option( 'wxcs-last-close' );
+		if( ! $last_close || time() >= intval( $last_close ) + MONTH_IN_SECONDS ) {
+			include( WXCS_PATH . 'templates/notice-w2w.php' );
+		}
 		
 		$current_screen = get_current_screen();
-		
-		/*if( ( empty( $settings['ws_appid'] ) || empty( $settings['ws_appsecret'] ) ) &&
-			(
-			//$current_screen -> base != 'edit' && array_key_exists($current_screen->post_type, $settings['ws_display_types']) ||
-			$current_screen -> id == 'settings_page_wxcs-settings'
-			) ){*/
 		if( $current_screen -> id == 'settings_page_wxcs-settings' ){
-			
 			$settings = get_option('ws_settings');
 			$public_ip = $this->get_public_ip();
 	?>
 			<div class="notice notice-warning">
-				<p class="wxcs-notice">
-				<?php
-				printf(
-				__( 'If you want to share link in Wechat directly, please follow these steps:
-				<br>1. Verify your account on WeChat Admin Platform.
-				<br>2. Enter AppID and AppSecret (Development > Basic Configuration).
-				<br>3. Add your Server IP <code>%s</code> to IP White List (Development > Basic Configuration > IP whitelist).
-				<br>4. Add Host <code>%s</code> to JSAPI Secure Domain (Settings > Account Info > Function setting > JS interface security domain name).', 'wx-custom-share' ),
-				$public_ip,
-				$_SERVER['HTTP_HOST']
-				)
-				?>
+				<p class="wxcs-setup-notice">
+				<?php _e( 'If you want to share link in Wechat directly, please follow these steps:', 'wx-custom-share' ) ?>
+				<br>
+				<?php _e( '1. Verify your account on WeChat Admin Platform.', 'wx-custom-share' ) ?>
+				<br>
+				<?php _e( '2. Enter AppID and AppSecret (Development > Basic Configuration).', 'wx-custom-share' ) ?>
+				<br>
+				<?php echo sprintf( __( '3. Add your Server IP <code>%s</code> to IP White List (Development > Basic Configuration > IP whitelist).', 'wx-custom-share' ), $public_ip ) ?>
+				<br>
+				<?php echo sprintf( __( '4. Add Host <code>%s</code> to JSAPI Secure Domain (Settings > Account Info > Function setting > JS interface security domain name).', 'wx-custom-share' ), $_SERVER['HTTP_HOST'] ) ?>
 				<br>
 				<?php _e( 'Otherwise you must share link to Wechat via QQ to custom share info, or share in QQ directly.', 'wx-custom-share' ) ?>
 				</p>
 			</div>
-			<style>p.wxcs-notice{ line-height: 2 }</style>
+			<style>p.wxcs-setup-notice{ line-height: 2 }</style>
 	<?php
 		}
 	}
 
 	//设置按钮
 	function add_action_links( $links ) {
-		
 		$setting_link = array(
 			'<a href="' . admin_url('options-general.php?page=wxcs-settings') . '">'. __('Settings','wx-custom-share'). '</a>',
 			'<a href="https://www.qwqoffice.com/article-20.html" target="_blank">'. __('Go Premium','wx-custom-share'). '</a>'
 		);
-		
 		return array_merge( $setting_link, $links );
 	}
 	
 	//支持按钮
 	function add_plugin_row_meta( $links, $file ){
-		
 		if ( strpos( $file, 'wx-custom-share.php' ) !== false ) {
 			$new_links = array(
 				'support' => '<a href="http://wpa.qq.com/msgrd?v=3&uin=514825166&site=qq&menu=yes" target="_blank">'. __('Support','wx-custom-share') .'</a>',
 			);
-			
 			$links = array_merge( $links, $new_links );
 		}
-		
 		return $links;
 	}
 
 	//设置菜单
 	function setting_menu(){
-		
 		add_options_page( __('Wechat Share Settings','wx-custom-share'), __('Wechat Share','wx-custom-share'), 'administrator', 'wxcs-settings', array( $this, 'setting_html_page' ) );
 	}
 
 	//注册设置项
 	function settings_init() {
-
+		$settings = get_option( 'ws_settings' );
+		
 		add_settings_section( 'wxcs_api_setting', __('WeChat Platform','wx-custom-share'), '', 'wxcs-settings' );
-		add_settings_field( 'wxcs_appid', __('Wechat AppID','wx-custom-share'), array( $this, 'appid_setting_cb' ), 'wxcs-settings', 'wxcs_api_setting' );
-		add_settings_field( 'wxcs_appsecret', __('Wechat AppSecret','wx-custom-share'), array( $this, 'appsecret_setting_cb' ), 'wxcs-settings', 'wxcs_api_setting' );
+		add_settings_field( 'wxcs_appid', __('Wechat AppID','wx-custom-share'), array( $this, 'appid_setting_cb' ), 'wxcs-settings', 'wxcs_api_setting', array( 'settings' => $settings ) );
+		add_settings_field( 'wxcs_appsecret', __('Wechat AppSecret','wx-custom-share'), array( $this, 'appsecret_setting_cb' ), 'wxcs-settings', 'wxcs_api_setting', array( 'settings' => $settings ) );
 		
 		add_settings_section( 'wxcs_default_setting', __('Default','wx-custom-share'), '', 'wxcs-settings' );
-		add_settings_field( 'wxcs_default_img', __('Default Icon','wx-custom-share'), array( $this, 'default_img_setting_cb' ), 'wxcs-settings', 'wxcs_default_setting' );
+		add_settings_field( 'wxcs_default_title', __('Default Title','wx-custom-share'), array( $this, 'default_title_setting_cb' ), 'wxcs-settings', 'wxcs_default_setting', array( 'settings' => $settings ) );
+		add_settings_field( 'wxcs_default_desc', __('Default Description','wx-custom-share'), array( $this, 'default_desc_setting_cb' ), 'wxcs-settings', 'wxcs_default_setting', array( 'settings' => $settings ) );
+		add_settings_field( 'wxcs_default_img', __('Default Icon','wx-custom-share'), array( $this, 'default_img_setting_cb' ), 'wxcs-settings', 'wxcs_default_setting', array( 'settings' => $settings ) );
 		
-		add_settings_section( 'wxcs_home_setting', __('Home','wx-custom-share'), array( $this, 'home_setting_section_cb' ), 'wxcs-settings' );
-		add_settings_field( 'wxcs_home_title', __('Home Page Title','wx-custom-share'), array( $this, 'home_title_setting_cb' ), 'wxcs-settings', 'wxcs_home_setting' );
-		add_settings_field( 'wxcs_home_desc', __('Home Page Description','wx-custom-share'), array( $this, 'home_desc_setting_cb' ), 'wxcs-settings', 'wxcs_home_setting' );
-		add_settings_field( 'wxcs_home_url', __('Home Page URL','wx-custom-share'), array( $this, 'home_url_setting_cb' ), 'wxcs-settings', 'wxcs_home_setting' );
-		add_settings_field( 'wxcs_home_img', __('Home Page Icon','wx-custom-share'), array( $this, 'home_img_setting_cb' ), 'wxcs-settings', 'wxcs_home_setting' );
-		add_settings_field( 'wxcs_home_use_actual_url', __('Use Actual URL','wx-custom-share'), array( $this, 'home_use_actual_url_setting_cb' ), 'wxcs-settings', 'wxcs_home_setting' );
+		if( get_option('show_on_front') != 'posts' ) {
+			add_settings_section( 'wxcs_home_setting', __('Home','wx-custom-share'), array( $this, 'home_setting_section_cb' ), 'wxcs-settings' );
+		} else {
+			add_settings_field( 'wxcs_home_title', __('Home Page Title','wx-custom-share'), array( $this, 'home_title_setting_cb' ), 'wxcs-settings', 'wxcs_home_setting', array( 'settings' => $settings ) );
+			add_settings_field( 'wxcs_home_desc', __('Home Page Description','wx-custom-share'), array( $this, 'home_desc_setting_cb' ), 'wxcs-settings', 'wxcs_home_setting', array( 'settings' => $settings ) );
+			add_settings_field( 'wxcs_home_url', __('Home Page URL','wx-custom-share'), array( $this, 'home_url_setting_cb' ), 'wxcs-settings', 'wxcs_home_setting', array( 'settings' => $settings ) );
+			add_settings_field( 'wxcs_home_img', __('Home Page Icon','wx-custom-share'), array( $this, 'home_img_setting_cb' ), 'wxcs-settings', 'wxcs_home_setting', array( 'settings' => $settings ) );
+			add_settings_field( 'wxcs_home_use_actual_url', __('Use Actual URL','wx-custom-share'), array( $this, 'home_use_actual_url_setting_cb' ), 'wxcs-settings', 'wxcs_home_setting', array( 'settings' => $settings ) );
+		}
 		
 		add_settings_section( 'wxcs_advanced_setting', __('Advanced','wx-custom-share'), '', 'wxcs-settings' );
-		add_settings_field( 'wxcs_post_types', __('Post types to custom','wx-custom-share'), array( $this, 'post_types_setting_cb' ), 'wxcs-settings', 'wxcs_advanced_setting' );
-		add_settings_field( 'wxcs_other', __('Other','wx-custom-share'), array( $this, 'other_setting_cb' ), 'wxcs-settings', 'wxcs_advanced_setting' );
+		add_settings_field( 'wxcs_other', __('Other','wx-custom-share'), array( $this, 'other_setting_cb' ), 'wxcs-settings', 'wxcs_advanced_setting', array( 'settings' => $settings ) );
 		
 		register_setting( 'wxcs-settings', 'ws_settings' );
 	}
 
-	function appid_setting_cb(){
-		
-		$settings = get_option( 'ws_settings' );
+	function appid_setting_cb( $args ){
+		$settings = $args['settings'];
 	?>
-	<input type="text" id="ws_settings[ws_appid]" name="ws_settings[ws_appid]" value="<?php echo isset($settings['ws_appid']) ? $settings['ws_appid'] : '' ?>" class="regular-text" autocomplete="off">
+	<input type="text" id="ws_settings[ws_appid]" name="ws_settings[ws_appid]" value="<?php echo isset($settings['ws_appid']) ? $settings['ws_appid'] : '' ?>" class="regular-text">
 	<?php
 	}
 
-	function appsecret_setting_cb(){
-		
-		$settings = get_option( 'ws_settings' );
+	function appsecret_setting_cb( $args ){
+		$settings = $args['settings'];
 	?>
-	<input type="text" id="ws_settings[ws_appsecret]" name="ws_settings[ws_appsecret]" value="<?php echo isset($settings['ws_appsecret']) ? $settings['ws_appsecret'] : '' ?>" class="regular-text" autocomplete="off">
+	<input type="text" id="ws_settings[ws_appsecret]" name="ws_settings[ws_appsecret]" value="<?php echo isset($settings['ws_appsecret']) ? $settings['ws_appsecret'] : '' ?>" class="regular-text">
+	<?php
+	}
+	
+	function default_title_setting_cb( $args ){
+		$settings = $args['settings'];
+	?>
+	<input type="text" id="ws_settings[ws_default_title]" name="ws_settings[ws_default_title]" value="<?php echo isset($settings['ws_default_title']) ? $settings['ws_default_title'] : '' ?>" class="regular-text">
+	<?php
+	}
+	
+	function default_desc_setting_cb( $args ){
+		$settings = $args['settings'];
+	?>
+	<input type="text" id="ws_settings[ws_default_desc]" name="ws_settings[ws_default_desc]" value="<?php echo isset($settings['ws_default_desc']) ? $settings['ws_default_desc'] : '' ?>" class="regular-text">
 	<?php
 	}
 
-	function default_img_setting_cb(){
-		
-		$settings = get_option( 'ws_settings' );
+	function default_img_setting_cb( $args ){
+		$settings = $args['settings'];
 	?>
-	<input type="text" id="ws_settings[ws_default_img]" name="ws_settings[ws_default_img]" value="<?php echo isset($settings['ws_default_img']) ? $settings['ws_default_img'] : '' ?>" class="regular-text" autocomplete="off">
+	<input type="text" id="ws_settings[ws_default_img]" name="ws_settings[ws_default_img]" value="<?php echo isset($settings['ws_default_img']) ? $settings['ws_default_img'] : '' ?>" class="regular-text">
 	<button type="button" class="button ws-media-btn" data-target="ws_settings[ws_default_img]">
 		<span class="ws-media-icon dashicons dashicons-admin-media"></span>
 		<?php _e('Media','wx-custom-share') ?>
@@ -479,43 +454,35 @@ class WX_Custom_Share{
 
 	function home_setting_section_cb(){
 	?>
-	<p class="description"><?php _e('Please go to edit page to set the share information if you choose a page as front page.','wx-custom-share') ?></p>
+	<p class="description"><?php echo sprintf( __('You are using a page as front page, please <a href="%s" target="_blank">click here</a> to set the share information.','wx-custom-share'), get_edit_post_link( get_option( 'page_on_front' ) ) ) ?></p>
 	<?php
 	}
 
 	function home_title_setting_cb(){
-		
-		$settings = get_option( 'ws_settings' );
-		$default_home_title = get_option('blogname');
+		$title = $this->get_title('home');
 	?>
-	<input type="text" id="ws_settings[ws_home_title]" name="ws_settings[ws_home_title]" value="<?php echo isset($settings['ws_home_title']) ? $settings['ws_home_title'] : '' ?>" placeholder="<?php echo $default_home_title ?>" class="regular-text" autocomplete="off">
+	<input type="text" id="ws_settings[ws_home_title]" name="ws_settings[ws_home_title]" value="<?php echo $title['meta'] ?>" placeholder="<?php echo $title['default'] ?>" class="regular-text">
 	<?php
 	}
 
 	function home_desc_setting_cb(){
-		
-		$settings = get_option( 'ws_settings' );
-		$default_home_desc = get_option('blogdescription');
+		$desc = $this->get_desc('home');
 	?>
-	<input type="text" id="ws_settings[ws_home_desc]" name="ws_settings[ws_home_desc]" value="<?php echo isset($settings['ws_home_desc']) ? $settings['ws_home_desc'] : '' ?>" placeholder="<?php echo $default_home_desc ?>" class="regular-text" autocomplete="off">
+	<input type="text" id="ws_settings[ws_home_desc]" name="ws_settings[ws_home_desc]" value="<?php echo $desc['meta'] ?>" placeholder="<?php echo $desc['default'] ?>" class="regular-text">
 	<?php
 	}
 
 	function home_url_setting_cb(){
-		
-		$settings = get_option( 'ws_settings' );
-		$default_home_url = get_option('siteurl');
+		$url = $this->get_url('home');
 	?>
-	<input type="text" id="ws_settings[ws_home_url]" name="ws_settings[ws_home_url]" value="<?php echo isset($settings['ws_home_url']) ? $settings['ws_home_url'] : '' ?>" placeholder="<?php echo $default_home_url ?>" class="regular-text" autocomplete="off">
+	<input type="text" id="ws_settings[ws_home_url]" name="ws_settings[ws_home_url]" value="<?php echo $url['meta'] ?>" placeholder="<?php echo $url['default'] ?>" class="regular-text">
 	<?php
 	}
 
 	function home_img_setting_cb(){
-		
-		$settings = get_option( 'ws_settings' );
-		$default_home_img = isset( $settings['ws_default_img'] ) && ! empty( $settings['ws_default_img'] ) ? $settings['ws_default_img'] : '';
+		$img = $this->get_img('home');
 	?>
-	<input type="text" id="ws_settings[ws_home_img]" name="ws_settings[ws_home_img]" value="<?php echo isset($settings['ws_home_img']) ? $settings['ws_home_img'] : '' ?>" placeholder="<?php echo $default_home_img ?>" class="regular-text" autocomplete="off">
+	<input type="text" id="ws_settings[ws_home_img]" name="ws_settings[ws_home_img]" value="<?php echo $img['meta'] ?>" placeholder="<?php echo $img['default'] ?>" class="regular-text">
 	<button type="button" class="button ws-media-btn" data-target="ws_settings[ws_home_img]">
 		<span class="ws-media-icon dashicons dashicons-admin-media"></span>
 		<?php _e('Media','wx-custom-share') ?>
@@ -523,9 +490,8 @@ class WX_Custom_Share{
 	<?php
 	}
 	
-	function home_use_actual_url_setting_cb(){
-		
-		$settings = get_option( 'ws_settings' );
+	function home_use_actual_url_setting_cb( $args ){
+		$settings = $args['settings'];
 	?>
 	<p>
 		<input type="checkbox" id="ws_settings[ws_home_use_actual_url]" name="ws_settings[ws_home_use_actual_url]" <?php checked( isset( $settings['ws_home_use_actual_url'] ) ) ?>>
@@ -534,22 +500,8 @@ class WX_Custom_Share{
 	<?php
 	}
 
-	function post_types_setting_cb(){
-		
-		$settings = get_option( 'ws_settings' );
-	?>
-	<?php foreach( $this->get_all_post_types() as $k => $v ): ?>
-		<p>
-			<input type="checkbox" id="ws_settings[ws_display_types][<?php echo $k ?>]" name="ws_settings[ws_display_types][<?php echo $k ?>]" <?php checked(isset($settings['ws_display_types'][$k])) ?>>
-			<label for="ws_settings[ws_display_types][<?php echo $k ?>]"><?php echo $v ?> (<?php echo $k ?>)</label>
-		</p>
-	<?php endforeach; ?>
-	<?php
-	}
-
-	function other_setting_cb(){
-		
-		$settings = get_option( 'ws_settings' );
+	function other_setting_cb( $args ){
+		$settings = $args['settings'];
 	?>
 	<p>
 		<input type="checkbox" id="ws_settings[ws_del_data]" name="ws_settings[ws_del_data]" <?php checked(isset($settings['ws_del_data'])) ?>>
@@ -565,7 +517,6 @@ class WX_Custom_Share{
 
 	//后台设置页面
 	function setting_html_page(){
-		
 		wp_enqueue_media();
 	?>
 	<div class="wrap">
@@ -579,17 +530,21 @@ class WX_Custom_Share{
 		<div class="ws-notice">
 			<h4><?php _e('Information Setting Override Order','wx-custom-share') ?></h4>
 			<h5><?php _e('Title','wx-custom-share') ?></h5>
-			<p><?php _e('Front Page: Home Title Setting >> Blog Name','wx-custom-share') ?><br>
-			<?php _e('Post: Post Title Setting in Post setting page >> Post title','wx-custom-share') ?></p>
+			<p><?php _e('Front Page: Home Title Setting >> Default Title Setting >> Blog Name','wx-custom-share') ?><br>
+			<?php _e('Post: Post Title Setting in Post setting page >> Post title','wx-custom-share') ?><br>
+			<?php _e('Other: Default Title Setting','wx-custom-share') ?></p>
 			<h5><?php _e('Description','wx-custom-share') ?></h5>
-			<p><?php _e('Front Page: Home Description Setting >> Blog Description','wx-custom-share') ?><br>
-			<?php _e('Post: Post Description Setting in Post setting page >> First Paragraph that length higher than 10 of Post Content >> Post Permalink','wx-custom-share') ?></p>
+			<p><?php _e('Front Page: Home Description Setting >> Default Description Setting >> Blog Description','wx-custom-share') ?><br>
+			<?php _e('Post: Post Description Setting in Post setting page >> First Paragraph that length higher than 10 of Post Content >> Default Description Setting >> Post Permalink','wx-custom-share') ?><br>
+			<?php _e('Other: Default Description Setting','wx-custom-share') ?></p>
 			<h5><?php _e('URL','wx-custom-share') ?></h5>
 			<p><?php _e('Front Page: Home URL Setting >> Site URL','wx-custom-share') ?><br>
-			<?php _e('Post: Post URL Setting in Post setting page >> Post Permalink','wx-custom-share') ?></p>
+			<?php _e('Post: Post URL Setting in Post setting page >> Post Permalink','wx-custom-share') ?><br>
+			<?php _e('Other: Current URL','wx-custom-share') ?></p>
 			<h5><?php _e('Icon','wx-custom-share') ?></h5>
 			<p><?php _e('Front Page: Home Icon Setting >> Default Icon Setting','wx-custom-share') ?><br>
-			<?php _e('Post: Post Icon Setting in Post setting page >> Post Featured Image >> First Image of Post Content >> Default Icon Setting','wx-custom-share') ?></p>
+			<?php _e('Post: Post Icon Setting in Post setting page >> Post Featured Image >> First Image of Post Content >> Default Icon Setting','wx-custom-share') ?><br>
+			<?php _e('Other: Default Icon Setting','wx-custom-share') ?></p>
 		</div>
 	</div>
 	<style>
@@ -672,18 +627,17 @@ class WX_Custom_Share{
 		$tips = array(
 			'post' => array(
 				'title' => __('Default is {post title} - {site name}.','wx-custom-share'),
-				'desc' => __('Default is the post permalink.','wx-custom-share'),
-				'url' => __('Default is first paragraph that length higher than 10 of post content or post permalink. The domain must match the page domain.','wx-custom-share'),
+				'desc' => __('Default is first paragraph that length higher than 10 of post content or default description or post permalink.','wx-custom-share'),
+				'url' => __('Default is the post permalink. The domain must match the page domain.','wx-custom-share'),
 				'img' => __('Default is post featured image or first image of post content.','wx-custom-share')
-			)
+			),
 		);
 		
-		include( plugin_dir_path( __FILE__ ) . 'templates/metabox.php' );
+		include( WXCS_PATH . 'templates/metabox.php' );
 	}
 	
 	//保存数据
 	function save_share_info( $type, $object_id ){
-		
 		$info = array();
 		$wxcs_url_field = array('ws-url', 'ws-img');
 		foreach( $_POST as $post_key => $post_value ){
@@ -704,9 +658,7 @@ class WX_Custom_Share{
 
 	//添加帖子Metabox
 	function add_post_metabox(){
-		
 		$settings = get_option('ws_settings');
-		
 		$meta_box = array(
 			'id' => 'ws-meta-box',
 			'title' => __('Wechat Share','wx-custom-share'),
@@ -714,13 +666,9 @@ class WX_Custom_Share{
 			'context' => 'normal',
 			'priority' => 'low'
 		);
-		
-		if( isset( $settings['ws_display_types'] ) && array_key_exists( get_post_type(), $settings['ws_display_types'] ) ){
-			add_meta_box( $meta_box['id'], $meta_box['title'], $meta_box['callback'], get_post_type(), $meta_box['context'], $meta_box['priority'] );
-		}
+		add_meta_box( $meta_box['id'], $meta_box['title'], $meta_box['callback'], get_post_type(), $meta_box['context'], $meta_box['priority'] );
 	}
 	function show_post_metabox(){
-		
 		global $post;
 		
 		$title = $this->get_title( 'post', $post->ID );
@@ -730,6 +678,16 @@ class WX_Custom_Share{
 		$use_actual_url = $this->is_use_actual_url( 'post', $post->ID );
 
 		$this->display_metabox( 'post', $title, $desc, $url, $img, $use_actual_url );
+	}
+	
+	// 修改AppID或AppSecret时删除AccessToken缓存
+	function delete_access_token( $value, $old_value, $option ) {
+		if( isset( $value['ws_appid'], $value['ws_appsecret'], $old_value['ws_appid'], $old_value['ws_appsecret'] )
+			&& ( $value['ws_appid'] != $old_value['ws_appid'] || $value['ws_appsecret'] != $old_value['ws_appsecret'] ) ) {
+			delete_option( 'ws_access_token' );
+			delete_option( 'ws_jsapi_ticket' );
+		}
+		return $value;
 	}
 
 	//帖子数据保存
@@ -760,31 +718,32 @@ class WX_Custom_Share{
 	
 	//前端嵌入JS
 	function add_share_js(){
-		
 		wp_enqueue_script( 'wxcs', '//qzonestyle.gtimg.cn/qzone/qzact/common/share/share.js', '', '', true );
 	}
 
 	//前端嵌入分享代码
 	function add_share_info(){
-		
+		wp_reset_query();
 		$settings = get_option('ws_settings');
-		
+		$type = 'other';
 		$object_id = 'null';
-		if( is_home() && get_option('show_on_front') == 'posts' ){
-			
+		
+		if( function_exists('is_shop') && is_shop() ) {
+			$type = 'post';
+			$object_id = woocommerce_get_page_id('shop');
+		}
+		elseif( is_home() && get_option('show_on_front') == 'posts' ){
 			$type = 'home';
 		}
-		else if( is_singular() && '' !== $settings['ws_display_types'] && array_key_exists( get_post_type(), $settings['ws_display_types'] ) ){
-			
+		elseif( is_home() ) {
+			$type = 'post';
+			$object_id = get_option('page_for_posts');
+		}
+		elseif( is_singular() ){
 			global $post;
 			$type = 'post';
 			$object_id = $post->ID;
 		}
-		else{
-			
-			$type = 'other';
-		}
-		
 	?>
 	<script id="wxcs-script">
 	WX_Custom_Share = function(){
@@ -795,7 +754,7 @@ class WX_Custom_Share{
 		var formData = {
 			action: 'wxcs_get_share_info',
 			type: '<?php echo $type ?>',
-			id: <?php echo $object_id ?>,
+			id: '<?php echo $object_id ?>',
 			signature_url: signature_url
 		};
 		
@@ -838,7 +797,7 @@ class WX_Custom_Share{
 						summary: data.desc,
 						pic: data.img,
 						url: data.url
-					}
+					};
 					
 					if( formData.type == 'other' ){
 						info.title = document.title;
@@ -851,8 +810,7 @@ class WX_Custom_Share{
 					}
 
 					if( data.error ){
-						console.error( '<?php _e('WX Custom Share','wx-custom-share') ?>: ' )
-						console.error( data.error );
+						console.error( '<?php _e('WX Custom Share','wx-custom-share') ?>: ', data.error );
 					}
 					else if( data.appid ){
 						info.WXconfig = {
@@ -861,7 +819,7 @@ class WX_Custom_Share{
 							timestamp: data.timestamp,
 							nonceStr: data.nonceStr,
 							signature: data.signature
-						}
+						};
 					}
 					
 					setShareInfo( info );
@@ -872,7 +830,6 @@ class WX_Custom_Share{
 			xhr.setRequestHeader( 'Content-Type', 'application/x-www-form-urlencoded' );
 			xhr.send( formatPostData( formData ) );
 		}
-		
 	}
 	
 	new WX_Custom_Share().init();
@@ -882,11 +839,9 @@ class WX_Custom_Share{
 
 	//Ajax获取分享信息
 	function ajax_get_share_info(){
-		
 		$settings = get_option('ws_settings');
 		
-		if( isset( $_REQUEST['id'] ) && isset( $_REQUEST['type'] ) && isset( $_REQUEST['signature_url'] ) ){
-			
+		if( isset( $_REQUEST['id'], $_REQUEST['type'], $_REQUEST['signature_url'] ) ){
 			$object_id = $_REQUEST['id'];
 			$type = $_REQUEST['type'];
 			$signature_url = $_REQUEST['signature_url'];
@@ -906,16 +861,14 @@ class WX_Custom_Share{
 		$result['img'] = $img['display'];
 		$result['use_actual_url'] = $is_use_actual_url;
 		
-		if( $settings['ws_appid'] != '' && $settings['ws_appsecret'] != '' ){
-			
+		$result = apply_filters( 'wxcs_share_info', $result, $type, $object_id );
+		
+		if( isset( $settings['ws_appid'], $settings['ws_appsecret'] ) && $settings['ws_appid'] && $settings['ws_appsecret'] ){
 			$jsapi_ticket = $this->get_jsapi_ticket();
 			if( $this->is_api_error( $jsapi_ticket ) ){
-				
 				if( isset( $settings['ws_debug'] ) ){
-					
 					$result['error'] = $this->get_api_error( $jsapi_ticket );
 				}
-				
 				echo json_encode( $result );
 				wp_die();
 			}
@@ -935,82 +888,26 @@ class WX_Custom_Share{
 		echo json_encode( $result );
 		wp_die();
 	}
+	
+	// 关闭通知
+	function ajax_close_notice(){
+		check_ajax_referer( 'wxcs-close-notice', 'nonce' );
+		update_option( 'wxcs-last-close', time() );
+		wp_die();
+	}
 
 	//本地化
 	function load_textdomain(){
-		
 		load_plugin_textdomain( 'wx-custom-share', false, basename( dirname( __FILE__ ) ) . '/languages' );
 	}
-
-
-	//多站点兼容
-
-	//创建新博客
-	function new_blog( $blog_id, $user_id, $domain, $path, $site_id, $meta ){
-		
-		global $wpdb;
-		
-		if( is_plugin_active_for_network('wx-custom-share/wx-custom-share.php') ){
-			
-			$old_blog = $wpdb->blogid;
-			switch_to_blog( $blog_id );
-			_wxcs_plugin_activation();
-			switch_to_blog( $old_blog );
-		}
-	}
-
 }
-
-//激活插件
-register_activation_hook( __FILE__, 'wxcs_plugin_activation' );
-function wxcs_plugin_activation( $networkwide ){
-	
-	global $wpdb;
-	
-	if( function_exists( 'is_multisite' ) && is_multisite() ){
-		
-		if( $networkwide ){
-			
-			$old_blog = $wpdb->blogid;
-			$blogids = $wpdb->get_col( "SELECT blog_id FROM $wpdb->blogs" );
-			
-			foreach( $blogids as $blog_id ){
-				switch_to_blog( $blog_id );
-				_wxcs_plugin_activation();
-			}
-			
-			switch_to_blog( $old_blog );
-			return;
-		}
-	}
-	
-	_wxcs_plugin_activation();
-}
-function _wxcs_plugin_activation(){
-	
-	add_option( 'ws_settings', array(
-		'ws_display_types' => array(
-			'post' => 'on',
-			'page' => 'on',
-			'attachment' => 'on'
-		)
-	) );
-}
-
-/*//停用插件
-register_deactivation_hook( __FILE__, 'wxcs_plugin_deactivation' ) );
-function wxcs_plugin_deactivation(){
-
-}*/
 
 //删除插件
 register_uninstall_hook( __FILE__, 'wxcs_plugin_uninstall' );
 function wxcs_plugin_uninstall(){
-	
 	global $wpdb;
 	
 	if( function_exists( 'is_multisite' ) && is_multisite() ){
-		
 		$old_blog = $wpdb->blogid;
 		$blogids = $wpdb->get_col("SELECT blog_id FROM $wpdb->blogs");
 		
@@ -1018,19 +915,15 @@ function wxcs_plugin_uninstall(){
 			switch_to_blog($blog_id);
 			_wxcs_plugin_uninstall();
 		}
-		
 		switch_to_blog($old_blog);
 		return;
 	}
-	
 	_wxcs_plugin_uninstall();
 }
 function _wxcs_plugin_uninstall(){
-	
 	$settings = get_option('ws_settings');
 	
 	if( isset($settings['ws_del_data']) ){
-		
 		global $wpdb;
 		
 		$wpdb->query( "delete from $wpdb->postmeta where meta_key = 'ws_info'" );
@@ -1038,6 +931,7 @@ function _wxcs_plugin_uninstall(){
 		delete_option( 'ws_settings' );
 		delete_option( 'ws_access_token' );
 		delete_option( 'ws_jsapi_ticket' );
+		delete_option( 'wxcs-last-close' );
 	}
 }
 

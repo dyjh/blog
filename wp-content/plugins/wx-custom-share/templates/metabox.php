@@ -1,7 +1,5 @@
 <?php
-
-//禁止直接访问
-if ( ! defined( 'ABSPATH' ) ) exit;
+defined( 'ABSPATH' ) || exit;
 ?>
 <input type="hidden" name="ws_meta_box_nonce" value="<?php echo wp_create_nonce( 'wx-custom-share' ) ?>">
 <table class="form-table wxcs-metabox">
