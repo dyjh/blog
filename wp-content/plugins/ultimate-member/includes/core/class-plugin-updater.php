@@ -1,8 +1,9 @@
 <?php
 namespace um\core;
 
-// Exit if accessed directly.
+
 if ( ! defined( 'ABSPATH' ) ) exit;
+
 
 if ( ! class_exists( 'um\core\Plugin_Updater' ) ) {
 
@@ -27,6 +28,9 @@ if ( ! class_exists( 'um\core\Plugin_Updater' ) ) {
 
 			//cron request to UM()->store_url;
 			add_action( 'um_check_extensions_licenses', array( &$this, 'um_checklicenses' ) );
+			
+			// clean update plugin cache
+			add_action( 'upgrader_process_complete', array( &$this, 'clean_update_plugins_cache' ), 20, 2 );
 
 			//update plugin info
 			add_filter( 'pre_set_site_transient_update_plugins', array( &$this, 'check_update' ) );
@@ -35,6 +39,22 @@ if ( ! class_exists( 'um\core\Plugin_Updater' ) ) {
 			add_filter( 'plugins_api', array( &$this, 'plugin_information' ), 9999, 3 );
 		}
 
+		
+		/**
+		 * This action is documented in wp-admin/includes/class-wp-upgrader.php
+		 * 
+		 * @see file /wp-admin/includes/class-plugin-upgrader.php method bulk_upgrade()
+		 * @since 2.1.1 [2019-11-15]
+		 *
+		 * @param \Plugin_Upgrader $updater
+		 * @param array $action
+		 */
+		public function clean_update_plugins_cache( $updater, $action = array() ) {
+			if ( is_a( $updater, 'Plugin_Upgrader' ) && isset( $updater->result ) && isset( $updater->result['destination_name'] ) && strpos( $updater->result['destination_name'], 'um-' ) === 0 && $action['action'] === 'update' && $action['action'] === 'plugin' ) {
+				wp_clean_plugins_cache( true );
+			}
+		}
+		
 
 		/**
 		 * Get all paid UM extensions
@@ -104,7 +124,7 @@ if ( ! class_exists( 'um\core\Plugin_Updater' ) ) {
 					'title' => 'User Tags',
 				),
 				'um-verified-users/um-verified-users.php'               => array(
-					'key'   => 'verified_users',
+					'key'   => 'verified',
 					'title' => 'Verified Users',
 				),
 				'um-woocommerce/um-woocommerce.php'                     => array(
@@ -139,6 +159,14 @@ if ( ! class_exists( 'um\core\Plugin_Updater' ) ) {
 					'key'   => 'filesharing',
 					'title' => 'File Sharing',
 				),
+				'um-user-location/um-user-location.php'                 => array(
+					'key'   => 'user-location',
+					'title' => 'User Location',
+				),
+				'um-profile-tabs/um-profile-tabs.php'                   => array(
+					'key'   => 'profile_tabs',
+					'title' => 'Profile tabs',
+				),
 			);
 
 			$active_um_plugins = array();
@@ -153,6 +181,9 @@ if ( ! class_exists( 'um\core\Plugin_Updater' ) ) {
 					switch_to_blog( $site->blog_id );
 
 					$the_plugs = get_option( 'active_plugins' );
+					if ( ! $the_plugs ) {
+						$the_plugs = array();
+					}
 					$the_plugs = array_merge( $the_plugs, $sitewide_plugins );
 
 					foreach ( $the_plugs as $key => $value ) {
@@ -243,6 +274,19 @@ if ( ! class_exists( 'um\core\Plugin_Updater' ) ) {
 
 			if ( ! is_wp_error( $request ) ) {
 				$request = json_decode( wp_remote_retrieve_body( $request ) );
+			} else {
+				$request = wp_remote_post(
+					UM()->store_url,
+					array(
+						'timeout'   => UM()->request_timeout,
+						'sslverify' => true,
+						'body'      => $api_params
+					)
+				);
+
+				if ( ! is_wp_error( $request ) ) {
+					$request = json_decode( wp_remote_retrieve_body( $request ) );
+				}
 			}
 
 			$request = ( $request ) ? maybe_unserialize( $request ) : false;
@@ -329,7 +373,11 @@ if ( ! class_exists( 'um\core\Plugin_Updater' ) ) {
 					continue;
 				}
 
-				$plugin_data = get_plugin_data( WP_PLUGIN_DIR . DIRECTORY_SEPARATOR . $slug );
+				$path = wp_normalize_path( WP_PLUGIN_DIR . DIRECTORY_SEPARATOR . $slug );
+				if ( ! file_exists( $path ) ) {
+					continue;
+				}
+				$plugin_data = get_plugin_data( $path );
 
 				$version_info = $this->get_cached_version_info( $slug );
 				if ( false === $version_info ) {

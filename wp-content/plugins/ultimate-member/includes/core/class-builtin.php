@@ -398,27 +398,27 @@ if ( ! class_exists( 'um\core\Builtin' ) ) {
 				),
 
 				'date' => array(
-					'name' => 'Date Picker',
-					'col1' => array('_title','_metakey','_help','_default','_range','_years','_years_x','_range_start','_range_end','_visibility'),
-					'col2' => array('_label','_placeholder','_public','_roles','_format','_pretty_format','_disabled_weekdays'),
-					'col3' => array('_required','_editable','_icon'),
-					'validate' => array(
-						'_title' => array(
-							'mode' => 'required',
+					'name'      => 'Date Picker',
+					'col1'      => array( '_title', '_metakey', '_help', '_default', '_range', '_years', '_years_x', '_range_start', '_range_end', '_visibility' ),
+					'col2'      => array( '_label', '_placeholder', '_public', '_roles', '_format', '_format_custom', '_pretty_format', '_disabled_weekdays' ),
+					'col3'      => array( '_required', '_editable', '_icon' ),
+					'validate'  => array(
+						'_title'        => array(
+							'mode'  => 'required',
 							'error' => __( 'You must provide a title', 'ultimate-member' )
 						),
-						'_metakey' => array(
-							'mode' => 'unique',
+						'_metakey'      => array(
+							'mode'  => 'unique',
 						),
-						'_years' => array(
-							'mode' => 'numeric',
+						'_years'        => array(
+							'mode'  => 'numeric',
 							'error' => __( 'Number of years is not valid', 'ultimate-member' )
 						),
-						'_range_start' => array(
-							'mode' => 'range-start',
+						'_range_start'  => array(
+							'mode'  => 'range-start',
 						),
-						'_range_end' => array(
-							'mode' => 'range-end',
+						'_range_end'    => array(
+							'mode'  => 'range-end',
 						),
 					)
 				),
@@ -1123,18 +1123,21 @@ if ( ! class_exists( 'um\core\Builtin' ) ) {
 				),
 
 				'hide_in_members' => array(
-					'title' => __('Hide my profile from directory','ultimate-member'),
-					'metakey' => 'hide_in_members',
-					'type' => 'radio',
-					'label' => __('Hide my profile from directory','ultimate-member'),
-					'help' => __('Here you can hide yourself from appearing in public directory','ultimate-member'),
-					'required' => 0,
-					'public' => 1,
-					'editable' => 1,
-					'default' => 'No',
-					'options' => array( 'No' => __('No','ultimate-member'), 'Yes' => __('Yes','ultimate-member') ),
-					'account_only' => true,
-					'required_opt' => array( 'members_page', 1 ),
+					'title'         => __( 'Hide my profile from directory', 'ultimate-member' ),
+					'metakey'       => 'hide_in_members',
+					'type'          => 'radio',
+					'label'         => __( 'Hide my profile from directory', 'ultimate-member' ),
+					'help'          => __( 'Here you can hide yourself from appearing in public directory', 'ultimate-member' ),
+					'required'      => 0,
+					'public'        => 1,
+					'editable'      => 1,
+					'default'       => UM()->member_directory()->get_hide_in_members_default() ? 'Yes' : 'No',
+					'options'       => array(
+						'No'    => __( 'No', 'ultimate-member' ),
+						'Yes'   => __( 'Yes', 'ultimate-member' ),
+					),
+					'account_only'  => true,
+					'required_opt'  => array( 'members_page', 1 ),
 				),
 
 				'delete_account' => array(
@@ -1216,6 +1219,47 @@ if ( ! class_exists( 'um\core\Builtin' ) ) {
 
 
 		/**
+		 * Get all fields without metakeys
+		 *
+		 * @since 2.0.56
+		 *
+		 * @return array
+		 */
+		function get_fields_without_metakey() {
+			$fields_without_metakey = array(
+				'block',
+				'shortcode',
+				'spacing',
+				'divider',
+				'group'
+			);
+
+
+			/**
+			 * UM hook
+			 *
+			 * @type filter
+			 * @title um_fields_without_metakey
+			 * @description Field Types without meta key
+			 * @input_vars
+			 * [{"var":"$types","type":"array","desc":"Field Types"}]
+			 * @change_log
+			 * ["Since: 2.0"]
+			 * @usage add_filter( 'um_fields_without_metakey', 'function_name', 10, 1 );
+			 * @example
+			 * <?php
+			 * add_filter( 'um_fields_without_metakey', 'my_fields_without_metakey', 10, 1 );
+			 * function my_fields_without_metakey( $types ) {
+			 *     // your code here
+			 *     return $types;
+			 * }
+			 * ?>
+			 */
+			return apply_filters( 'um_fields_without_metakey', $fields_without_metakey );
+		}
+
+
+		/**
 		 * May be used to show a dropdown, or source for user meta
 		 *
 		 * @param null $exclude_types
@@ -1225,38 +1269,8 @@ if ( ! class_exists( 'um\core\Builtin' ) ) {
 		 */
 		function all_user_fields( $exclude_types = null, $show_all = false ) {
 
-			$fields_without_metakey = array(
-				'block',
-				'shortcode',
-				'spacing',
-				'divider',
-				'group'
-			);
-			$fields_without_metakey = apply_filters( 'um_fields_without_metakey', $fields_without_metakey );
-
-			remove_filter( 'um_fields_without_metakey', 'um_user_tags_requires_no_metakey' );
-
-			/**
-			 * UM hook
-			 *
-			 * @type filter
-			 * @title um_fields_without_metakey
-			 * @description Extend Fields without metakey
-			 * @input_vars
-			 * [{"var":"$fields","type":"array","desc":"Fields without metakey"}]
-			 * @change_log
-			 * ["Since: 2.0"]
-			 * @usage add_filter( 'um_fields_without_metakey', 'function_name', 10, 1 );
-			 * @example
-			 * <?php
-			 * add_filter( 'um_fields_without_metakey', 'my_fields_without_metakey', 10, 1 );
-			 * function my_fields_without_metakey( $fields ) {
-			 *     // your code here
-			 *     return $fields;
-			 * }
-			 * ?>
-			 */
-			$fields_without_metakey = apply_filters( 'um_fields_without_metakey', $fields_without_metakey );
+			$fields_without_metakey = $this->get_fields_without_metakey();
+			$fields_without_metakey = apply_filters( 'um_all_user_fields_without_metakey', $fields_without_metakey );
 
 			if ( ! $show_all ) {
 				$this->fields_dropdown = array('image','file','password','rating');
@@ -1331,6 +1345,7 @@ if ( ! class_exists( 'um\core\Builtin' ) ) {
 			$array['skype'] = __('Skype ID','ultimate-member');
 			$array['soundcloud'] = __('SoundCloud Profile','ultimate-member');
 			$array['twitter_url'] = __('Twitter URL','ultimate-member');
+			$array['is_email'] = __('E-mail( Not Unique )','ultimate-member');
 			$array['unique_email'] = __('Unique E-mail','ultimate-member');
 			$array['unique_value'] = __('Unique Metakey value','ultimate-member');
 			$array['unique_username'] = __('Unique Username','ultimate-member');

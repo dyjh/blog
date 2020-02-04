@@ -33,6 +33,16 @@ if ( ! class_exists( 'UM_Functions' ) ) {
 
 
 		/**
+		 * Check if AJAX now
+		 *
+		 * @return bool
+		 */
+		function is_ajax() {
+			return function_exists( 'wp_doing_ajax' ) ? wp_doing_ajax() : defined( 'DOING_AJAX' );
+		}
+
+
+		/**
 		 * Check frontend nonce
 		 *
 		 * @param bool $action
@@ -168,7 +178,8 @@ if ( ! class_exists( 'UM_Functions' ) ) {
 
 			$path = '';
 			if ( $basename ) {
-				$array = explode( '/', trim( $basename, '/' ) );
+				// use '/' instead of "DIRECTORY_SEPARATOR", because wp_normalize_path makes the correct replace
+				$array = explode( '/', wp_normalize_path( trim( $basename ) ) );
 				$path  = $array[0];
 			}
 
@@ -276,7 +287,7 @@ if ( ! class_exists( 'UM_Functions' ) ) {
 		function locate_template( $template_name, $path = '' ) {
 			// check if there is template at theme folder
 			$template = locate_template( array(
-				trailingslashit( 'ultimate-member/' . $path ) . $template_name
+				trailingslashit( 'ultimate-member' . DIRECTORY_SEPARATOR . $path ) . $template_name
 			) );
 
 			if ( ! $template ) {
@@ -285,7 +296,7 @@ if ( ! class_exists( 'UM_Functions' ) ) {
 				} else {
 					$template = trailingslashit( um_path );
 				}
-				$template .= 'templates/' . $template_name;
+				$template .= 'templates' . DIRECTORY_SEPARATOR . $template_name;
 			}
 
 
@@ -364,5 +375,21 @@ if ( ! class_exists( 'UM_Functions' ) ) {
 
 			return $array;
 		}
+
+
+		/**
+		 * @since 2.1.0
+		 *
+		 * @param $var
+		 * @return array|string
+		 */
+		function clean_array( $var ) {
+			if ( is_array( $var ) ) {
+				return array_map( array( $this, 'clean_array' ), $var );
+			} else {
+				return is_scalar( $var ) ? sanitize_text_field( $var ) : $var;
+			}
+		}
+
 	}
 }

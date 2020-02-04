@@ -60,9 +60,9 @@
 }
 .um.um-in-admin .um-tip {display: none !important}
 
-.um input,
-.um select,
-.um textarea{
+.um:not(.um-directory) input,
+.um:not(.um-directory) select,
+.um:not(.um-directory) textarea{
 	font-size: 15px;
 }
 
@@ -175,6 +175,11 @@ p.um-notice {
 	position: relative;
 }
 
+p.um-notice a {
+	color: #fff;
+	text-decoration: underline;
+}
+
 p.um-notice i {
     position: absolute;
     right: 14px;
@@ -199,6 +204,11 @@ p.um-notice.warning {
 	color: #666;
 	border: 1px solid #efe4a2;
 	padding: 8px 15px !important;
+}
+
+p.um-notice.warning a {
+	color: #666;
+	text-decoration: underline;
 }
 
 /*
@@ -227,7 +237,7 @@ p.um-notice.warning {
 	top: -17px;
 	left: 10px;
 	position: absolute;
-	z-index: 900;
+	z-index: 1;
 	color: #C74A4A;
 	font-size: 28px;
 	line-height: 1em !important;
@@ -337,10 +347,6 @@ p.um-notice.warning {
 	font-size: 17px;
 }
 
-.um-field-shortcode {
-
-}
-
 .um-field-spacing {
 	width: 100%;
 }
@@ -381,6 +387,7 @@ p.um-notice.warning {
 }
 
 .um-form input[type=text],
+.um-form input[type=search],
 .um-form input[type=tel],
 .um-form input[type=number],
 .um-form input[type=password] {
@@ -408,6 +415,7 @@ p.um-notice.warning {
 }
 
 .um-form input[type=text]:focus,
+.um-form input[type=search]:focus,
 .um-form input[type=tel]:focus,
 .um-form input[type=number]:focus,
 .um-form input[type=password]:focus,
@@ -464,8 +472,8 @@ p.um-notice.warning {
 	position: relative;
 }
 
-.um-field-checkbox,
-.um-field-radio {
+.um-field-checkbox:not(.um-field),
+.um-field-radio:not(.um-field) {
 	display: block;
 	margin: 8px 0;
 	position: relative;
@@ -705,7 +713,13 @@ a.um-link-alt:hover {text-decoration: underline !important;}
 	margin: 0 !important;
 }
 
-.um-dropdown li  a {
+.um-dropdown ul {
+	background: #fff;
+	position: relative;
+	z-index: 16;
+}
+
+.um-dropdown li a {
 	display: block;
 	padding: 8px 12px;
 	color: #666;
@@ -718,7 +732,7 @@ a.um-link-alt:hover {text-decoration: underline !important;}
 	padding: 12px;
 }
 
-.um-dropdown li  a:hover {
+.um-dropdown li a:hover {
 
 }
 
@@ -728,7 +742,6 @@ a.um-link-alt:hover {text-decoration: underline !important;}
 
 .um-dropdown-arr {
 	position: absolute;
-	color: #fff;
 	font-size: 24px;
 	width: 24px;
 	height: 24px;
@@ -845,7 +858,7 @@ small.um-max-filesize span{
     user-select: none;
     background: none !important;
     background-color: #fff !important;
-    border: 2px solid #ddd !important;
+    border: 1px solid #ddd !important;
 }
 .select2.select2-container .select2-selection .select2-selection__arrow b[role=presentation]{
 	display:none;
@@ -876,7 +889,7 @@ small.um-max-filesize span{
     border-left: 0 !important;
 }
 .select2-container.select2-container--open .select2-dropdown{
-	 border: 2px solid #ddd !important;
+	 border: 1px solid #ddd !important;
 }
 .select2-results li{
 	list-style: none;

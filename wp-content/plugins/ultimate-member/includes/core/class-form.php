@@ -27,11 +27,15 @@ if ( ! class_exists( 'um\core\Form' ) ) {
 
 
 		/**
+		 * @var null
+		 */
+		var $post_form = null;
+
+
+		/**
 		 * Form constructor.
 		 */
 		function __construct() {
-
-			$this->post_form = null;
 
 			$this->form_suffix = null;
 
@@ -39,9 +43,9 @@ if ( ! class_exists( 'um\core\Form' ) ) {
 
 			$this->processing = null;
 
-			add_action('template_redirect', array(&$this, 'form_init'), 2);
+			add_action( 'template_redirect', array( &$this, 'form_init' ), 2 );
 
-			add_action('init', array(&$this, 'field_declare'), 10);
+			add_action( 'init', array( &$this, 'field_declare' ), 10 );
 
 		}
 
@@ -101,8 +105,25 @@ if ( ! class_exists( 'um\core\Form' ) ) {
 
 			if ( $arr_options['post']['members_directory'] == 'yes' ) {
 				$ajax_source_func = $_POST['child_callback'];
-				if( function_exists( $ajax_source_func ) ){
-					$arr_options['items'] = call_user_func( $ajax_source_func, $arr_options['field']['parent_dropdown_relationship']  );
+				if ( function_exists( $ajax_source_func ) ) {
+					$arr_options['items'] = call_user_func( $ajax_source_func, $arr_options['field']['parent_dropdown_relationship'] );
+
+					global $wpdb;
+
+					$values_array = $wpdb->get_col( $wpdb->prepare(
+						"SELECT DISTINCT meta_value 
+						FROM $wpdb->usermeta 
+						WHERE meta_key = %s AND 
+						      meta_value != ''",
+						$arr_options['post']['child_name']
+					) );
+
+					if ( ! empty( $values_array ) ) {
+						$arr_options['items'] = array_intersect( $arr_options['items'], $values_array );
+					} else {
+						$arr_options['items'] = array();
+					}
+
 					wp_send_json( $arr_options );
 				}
 			} else {
@@ -218,8 +239,9 @@ if ( ! class_exists( 'um\core\Form' ) ) {
 		 * @return boolean
 		 */
 		function has_error( $key ) {
-			if ( isset( $this->errors[$key] ) )
+			if ( isset( $this->errors[ $key ] ) ) {
 				return true;
+			}
 			return false;
 		}
 
@@ -227,7 +249,7 @@ if ( ! class_exists( 'um\core\Form' ) ) {
 		/**
 		 * Declare all fields
 		 */
-		function field_declare(){
+		function field_declare() {
 			if ( isset( UM()->builtin()->custom_fields ) ) {
 				$this->all_fields = UM()->builtin()->custom_fields;
 			} else {
@@ -237,11 +259,11 @@ if ( ! class_exists( 'um\core\Form' ) ) {
 
 
 		/**
-		 * Validate form
+		 * Validate form on submit
 		 */
 		function form_init() {
 			if ( isset( $_SERVER['REQUEST_METHOD'] ) ) {
-				$http_post = ('POST' == $_SERVER['REQUEST_METHOD']);
+				$http_post = ( 'POST' == $_SERVER['REQUEST_METHOD'] );
 			} else {
 				$http_post = 'POST';
 			}
